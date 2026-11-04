@@ -1,0 +1,404 @@
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.core.window import Window
+import random
+import json
+import os
+
+Window.clearcolor = (0.1, 0.1, 0.1, 1)
+
+class DuelGame(BoxLayout):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.padding = 20
+        self.spacing = 10
+        
+        # Прогресс и монеты
+        self.coins = 0
+        self.has_vest = False
+        self.expert_kills = 0
+        self.boss_kills = 0
+        self.total_wins = 0 
+        
+        # Арсенал
+        self.owned_weapons = ["Пистолет"]
+        self.equipped_weapon = "Пистолет"
+        
+        # Данные боя
+        self.difficulty = "Легко"
+        self.enemy_pos = 2
+        self.player_pos = 2
+        
+        self.load_game()
+        self.show_main_menu()
+
+    def clear_screen(self):
+        self.clear_widgets()
+
+    def show_main_menu(self):
+        self.clear_screen()
+        
+        menu_color = (0.8, 0.6, 0, 1) if "Золотой Маузер" in self.owned_weapons else (0.2, 0.2, 0.8, 1)
+        
+        title = Label(text="[b] D U E L [/b]", markup=True, font_size='30sp', size_hint=(1, 0.1))
+        self.add_widget(title)
+        
+        coins_label = Label(text=f"Монеты: {self.coins} | Побед: {self.total_wins}", font_size='18sp', size_hint=(1, 0.1))
+        self.add_widget(coins_label)
+        
+        progress_label = Label(text=f"Эксперт: {self.expert_kills}/5 | Босс: {self.boss_kills}/5", font_size='14sp', size_hint=(1, 0.1), color=(1, 0.5, 0.5, 1))
+        self.add_widget(progress_label)
+        
+        play_btn = Button(text="Играть", size_hint=(1, 0.12), font_size='18sp', background_color=menu_color)
+        play_btn.bind(on_press=self.show_difficulty_menu)
+        self.add_widget(play_btn)
+        
+        shop_btn = Button(text="Магазин", size_hint=(1, 0.12), font_size='18sp', background_color=menu_color)
+        shop_btn.bind(on_press=self.show_shop)
+        self.add_widget(shop_btn)
+        
+        # НОВАЯ КНОПКА ВЫБОРА ОРУЖИЯ
+        weapon_btn = Button(text=f"Оружие: {self.equipped_weapon}", size_hint=(1, 0.12), font_size='16sp', background_color=(0.5, 0.2, 0.5, 1))
+        weapon_btn.bind(on_press=self.show_weapons)
+        self.add_widget(weapon_btn)
+        
+        save_btn = Button(text="Сохранить", size_hint=(1, 0.12), font_size='18sp', background_color=menu_color)
+        save_btn.bind(on_press=lambda x: self.save_game())
+        self.add_widget(save_btn)
+        
+        exit_btn = Button(text="Выход", size_hint=(1, 0.1), font_size='18sp', background_color=(0.8, 0.2, 0.2, 1))
+        exit_btn.bind(on_press=lambda x: App.get_running_app().stop())
+        self.add_widget(exit_btn)
+
+    def show_weapons(self, instance):
+        self.clear_screen()
+        
+        title = Label(text="Ваш арсенал", font_size='24sp', size_hint=(1, 0.15))
+        self.add_widget(title)
+        
+        grid = BoxLayout(orientation='vertical', spacing=5, size_hint=(0.8, 0.6), pos_hint={'center_x': 0.5})
+        
+        for w in self.owned_weapons:
+            btn = Button(text=f"Взять {w}", font_size='16sp', background_color=(0.2, 0.6, 0.2, 1) if w == self.equipped_weapon else (0.3, 0.3, 0.3, 1))
+            btn.bind(on_press=lambda x, weapon=w: self.equip_weapon(weapon))
+            grid.add_widget(btn)
+            
+        self.add_widget(grid)
+        
+        back_btn = Button(text="Назад", size_hint=(1, 0.1))
+        back_btn.bind(on_press=lambda x: self.show_main_menu())
+        self.add_widget(back_btn)
+
+    def equip_weapon(self, weapon):
+        self.equipped_weapon = weapon
+        self.show_main_menu()
+
+    def show_difficulty_menu(self, instance):
+        self.clear_screen()
+        
+        title = Label(text="Выбор сложности", font_size='20sp', size_hint=(1, 0.1))
+        self.add_widget(title)
+        
+        easy_btn = Button(text="Легко (50 HP)", size_hint=(1, 0.1), font_size='14sp')
+        easy_btn.bind(on_press=lambda x: self.start_duel("Легко", 50))
+        self.add_widget(easy_btn)
+        
+        med_btn = Button(text="Средне (100 HP)", size_hint=(1, 0.1), font_size='14sp')
+        med_btn.bind(on_press=lambda x: self.start_duel("Средне", 100))
+        self.add_widget(med_btn)
+        
+        hard_btn = Button(text="Сложно (150 HP)", size_hint=(1, 0.1), font_size='14sp', background_color=(1, 0.2, 0.2, 1))
+        hard_btn.bind(on_press=lambda x: self.start_duel("Сложно", 150))
+        self.add_widget(hard_btn)
+        
+        expert_btn = Button(text="ЭКСПЕРТ (200 HP)", size_hint=(1, 0.1), font_size='14sp', background_color=(0.6, 0.1, 0.6, 1))
+        expert_btn.bind(on_press=lambda x: self.start_duel("Эксперт", 200))
+        self.add_widget(expert_btn)
+        
+        if self.expert_kills >= 5:
+            boss_btn = Button(text="НЕУЯЗВИМЫЙ (250 HP)", size_hint=(1, 0.1), font_size='14sp', background_color=(0.8, 0.6, 0, 1))
+            boss_btn.bind(on_press=lambda x: self.start_duel("Неуязвимый", 250))
+            self.add_widget(boss_btn)
+        else:
+            boss_btn = Button(text=f"НЕУЯЗВИМЫЙ ({self.expert_kills}/5)", size_hint=(1, 0.1), font_size='11sp', background_color=(0.3, 0.3, 0.3, 1))
+            boss_btn.bind(on_press=lambda x: self.show_locked_msg())
+            self.add_widget(boss_btn)
+            
+        back_btn = Button(text="Назад", size_hint=(1, 0.1), font_size='14sp')
+        back_btn.bind(on_press=lambda x: self.show_main_menu())
+        self.add_widget(back_btn)
+
+    def show_locked_msg(self):
+        if len(self.children) > 0:
+            self.children[0].text = f"Нужно убить Эксперта 5 раз! ({self.expert_kills}/5)"
+
+    def start_duel(self, diff_name, enemy_max_hp):
+        self.clear_screen()
+        self.difficulty = diff_name
+        self.player_hp = 100
+        self.player_max_hp = 100
+        self.enemy_hp = enemy_max_hp
+        self.enemy_max_hp = enemy_max_hp
+        
+        self.enemy_pos = random.choice([1, 2, 3])
+        self.player_pos = 2
+        
+        self.hp_label = Label(text="", font_size='16sp', size_hint=(1, 0.15), markup=True)
+        self.add_widget(self.hp_label)
+        
+        self.status_label = Label(text="", font_size='14sp', size_hint=(1, 0.1))
+        self.add_widget(self.status_label)
+        
+        self.log_label = Label(text="Вы ходите первым!", font_size='14sp', size_hint=(1, 0.15))
+        self.add_widget(self.log_label)
+        
+        shoot_layout = BoxLayout(size_hint=(1, 0.15), spacing=5)
+        # Цвет зависит от оружия
+        if self.equipped_weapon == "Золотой Маузер": btn_color = (0.8, 0.6, 0, 1)
+        elif self.equipped_weapon == "АК-47": btn_color = (0.2, 0.6, 0.2, 1)
+        elif self.equipped_weapon == "Дробовик": btn_color = (0.6, 0.3, 0.1, 1)
+        else: btn_color = (0.8, 0.3, 0.3, 1)
+        
+        btn_s1 = Button(text="Выстрел\nВлево", background_color=btn_color, font_size='12sp')
+        btn_s1.bind(on_press=lambda x: self.resolve_shoot(1))
+        btn_s2 = Button(text="Выстрел\nЦентр", background_color=btn_color, font_size='12sp')
+        btn_s2.bind(on_press=lambda x: self.resolve_shoot(2))
+        btn_s3 = Button(text="Выстрел\nВправо", background_color=btn_color, font_size='12sp')
+        btn_s3.bind(on_press=lambda x: self.resolve_shoot(3))
+
+        shoot_layout.add_widget(btn_s1)
+        shoot_layout.add_widget(btn_s2)
+        shoot_layout.add_widget(btn_s3)
+        self.add_widget(shoot_layout)
+        
+        move_layout = BoxLayout(size_hint=(1, 0.15), spacing=5)
+        btn_m1 = Button(text="Бежать\nВлево", background_color=(0.3, 0.3, 0.8, 1), font_size='12sp')
+        btn_m1.bind(on_press=lambda x: self.player_move(1))
+        btn_m2 = Button(text="Бежать\nЦентр", background_color=(0.3, 0.3, 0.8, 1), font_size='12sp')
+        btn_m2.bind(on_press=lambda x: self.player_move(2))
+        btn_m3 = Button(text="Бежать\nВправо", background_color=(0.3, 0.3, 0.8, 1), font_size='12sp')
+        btn_m3.bind(on_press=lambda x: self.player_move(3))
+        move_layout.add_widget(btn_m1)
+        move_layout.add_widget(btn_m2)
+        move_layout.add_widget(btn_m3)
+        self.add_widget(move_layout)
+        
+        self.update_status()
+
+    def update_status(self):
+        vest_text = "ЕСТЬ" if self.has_vest else "НЕТ"
+        self.hp_label.text = f"Вы: {self.player_hp}/{self.player_max_hp} HP | Враг: {self.enemy_hp}/{self.enemy_max_hp} HP"
+        self.status_label.text = f"Режим: {self.difficulty} | Жилет: {vest_text} | Оружие: {self.equipped_weapon}"
+
+    def player_move(self, pos):
+        self.player_pos = pos
+        self.log_label.text = f"Вы перебежали в {pos}.\nХод врага..."
+        self.resolve_enemy_turn()
+
+    def resolve_shoot(self, target):
+        if self.difficulty == "Легко": dodge, miss = 0.0, 0.7
+        elif self.difficulty == "Средне": dodge, miss = 0.0, 0.3
+        elif self.difficulty == "Сложно": dodge, miss = 0.75, 0.1
+        elif self.difficulty == "Эксперт": dodge, miss = 0.90, 0.01
+        elif self.difficulty == "Неуязвимый": dodge, miss = 1.0, 0.0
+
+        # --- ЗОЛОТОЙ МАУЗЕР ---
+        if self.equipped_weapon == "Золотой Маузер":
+            if target == self.enemy_pos:
+                dmg = 50
+                self.enemy_hp -= dmg
+                self.log_label.text = f"МАУЗЕР: Урон {dmg}."
+                if self.enemy_hp <= 0:
+                    self.end_combat(True)
+                    return
+            else:
+                self.log_label.text = "Пиу! Мимо."
+            self.resolve_enemy_turn(miss)
+            return
+
+        # --- НЕУЯЗВИМЫЙ ---
+        if self.difficulty == "Неуязвимый":
+            if self.equipped_weapon == "Пистолет" or self.equipped_weapon == "Узи":
+                self.log_label.text = "Босс смеется! Нужен крупный калибр."
+                self.resolve_enemy_turn(miss)
+                return
+            else:
+                # Дробовик и АК-47 пробивают босса
+                if target == self.enemy_pos:
+                    dmg = 35 if self.equipped_weapon == "Дробовик" else 45
+                    self.enemy_hp -= dmg
+                    self.log_label.text = f"{self.equipped_weapon}: Урон {dmg}!"
+                    if self.enemy_hp <= 0:
+                        self.end_combat(True)
+                        return
+                else:
+                    self.log_label.text = "Мимо!"
+                self.resolve_enemy_turn(miss)
+                return
+
+        # --- ОБЫЧНЫЕ ВРАГИ ---
+        if target == self.enemy_pos:
+            if random.random() < dodge:
+                self.log_label.text = "Враг увернулся!"
+            else:
+                if self.equipped_weapon == "АК-47": dmg = 45
+                elif self.equipped_weapon == "Дробовик": dmg = 35
+                elif self.equipped_weapon == "Узи": dmg = 30
+                else: dmg = 18
+                
+                self.enemy_hp -= dmg
+                self.log_label.text = f"{self.equipped_weapon}: Урон {dmg}."
+                if self.enemy_hp <= 0:
+                    self.end_combat(True)
+                    return
+        else:
+            self.log_label.text = "Пиу! Мимо."
+            
+        self.resolve_enemy_turn(miss)
+
+    def resolve_enemy_turn(self, miss_chance=0.5):
+        if random.random() < 0.4 and self.difficulty not in ["Неуязвимый"]:
+            self.enemy_pos = random.choice([1, 2, 3])
+            self.log_label.text += "\nВраг перебежал!"
+        else:
+            self.log_label.text += f"\nВраг стреляет в ({self.player_pos})!"
+            if random.random() > miss_chance:
+                dmg = random.randint(15, 30)
+                if self.has_vest:
+                    self.has_vest = False
+                    self.log_label.text += f"\nЖилет сломан!"
+                else:
+                    self.player_hp -= dmg
+                    self.log_label.text += f"\nВраг попал! -{dmg} HP."
+                    if self.player_hp <= 0:
+                        self.end_combat(False)
+                        return
+            else:
+                self.log_label.text += "\nВраг промазал!"
+                
+        self.update_status()
+
+    def end_combat(self, win):
+        for child in self.children:
+            if isinstance(child, BoxLayout) or isinstance(child, Button):
+                child.disabled = True
+
+        if win:
+            self.total_wins += 1
+            if self.difficulty == "Легко": reward = 10
+            elif self.difficulty == "Средне": reward = 15
+            elif self.difficulty == "Сложно": reward = 50
+            elif self.difficulty == "Эксперт": 
+                reward = 100
+                self.expert_kills += 1
+            elif self.difficulty == "Неуязвимый": 
+                reward = 250
+                self.boss_kills += 1
+            
+            self.coins += reward
+            self.log_label.text += f"\nПОБЕДА! +{reward} монет."
+            
+            if self.difficulty == "Неуязвимый" and self.boss_kills == 5 and "Золотой Маузер" not in self.owned_weapons:
+                self.log_label.text += "\nОТКРЫТ МАУЗЕР! (В магазине)"
+        else:
+            self.log_label.text += "\nВЫ ПОГИБЛИ."
+            # При смерти теряем купленное оружие (кроме пистолета и маузера)
+            if self.equipped_weapon != "Пистолет" and self.equipped_weapon != "Золотой Маузер":
+                self.log_label.text += f"\n{self.equipped_weapon} потерян!"
+                self.owned_weapons.remove(self.equipped_weapon)
+                self.equipped_weapon = "Пистолет"
+            
+        back_btn = Button(text="В меню", size_hint=(1, 0.2), background_color=(0.2, 0.6, 0.2, 1))
+        back_btn.bind(on_press=lambda x: self.show_main_menu())
+        self.add_widget(back_btn)
+
+    def show_shop(self, instance):
+        self.clear_screen()
+        title = Label(text="Магазин", font_size='25sp', size_hint=(1, 0.15))
+        self.add_widget(title)
+        
+        coins_label = Label(text=f"У вас: {self.coins}", font_size='18sp', size_hint=(1, 0.1))
+        self.add_widget(coins_label)
+        
+        grid = BoxLayout(orientation='vertical', spacing=5, size_hint=(1, 0.6))
+        
+        if "Узи" not in self.owned_weapons:
+            btn = Button(text="Узи (30 урона) - 70", font_size='14sp')
+            btn.bind(on_press=lambda x: self.buy_item("Узи", 70))
+            grid.add_widget(btn)
+            
+        if "Дробовик" not in self.owned_weapons:
+            btn = Button(text="Дробовик (35 урона) - 95", font_size='14sp')
+            btn.bind(on_press=lambda x: self.buy_item("Дробовик", 95))
+            grid.add_widget(btn)
+            
+        if "АК-47" not in self.owned_weapons:
+            btn = Button(text="АК-47 (45 урона) - 110", font_size='14sp')
+            btn.bind(on_press=lambda x: self.buy_item("АК-47", 110))
+            grid.add_widget(btn)
+            
+        if not self.has_vest:
+            btn = Button(text="Жилет (1 удар) - 35", font_size='14sp')
+            btn.bind(on_press=lambda x: self.buy_item("Жилет", 35))
+            grid.add_widget(btn)
+            
+        if self.boss_kills >= 5 and "Золотой Маузер" not in self.owned_weapons:
+            btn = Button(text="ЗАБРАТЬ МАУЗЕР!", font_size='14sp', background_color=(1, 0.8, 0, 1))
+            btn.bind(on_press=lambda x: self.buy_item("Золотой Маузер", 0))
+            grid.add_widget(btn)
+            
+        self.add_widget(grid)
+        
+        back_btn = Button(text="Назад", size_hint=(1, 0.1))
+        back_btn.bind(on_press=lambda x: self.show_main_menu())
+        self.add_widget(back_btn)
+
+    def buy_item(self, item, price):
+        if self.coins >= price:
+            self.coins -= price
+            if item == "Жилет": self.has_vest = True
+            else: self.owned_weapons.append(item)
+            self.show_shop(None)
+
+    def get_save_path(self):
+        return os.path.join(App.get_running_app().user_data_dir, "save.json")
+
+    def save_game(self):
+        data = {
+            "coins": self.coins, "vest": self.has_vest,
+            "expert_kills": self.expert_kills, "boss_kills": self.boss_kills,
+            "owned_weapons": self.owned_weapons, "equipped_weapon": self.equipped_weapon,
+            "total_wins": self.total_wins
+        }
+        try:
+            with open(self.get_save_path(), "w") as f:
+                json.dump(data, f)
+            self.show_main_menu() 
+        except:
+            pass
+
+    def load_game(self):
+        path = self.get_save_path()
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    data = json.load(f)
+                    self.coins = data.get("coins", 0)
+                    self.has_vest = data.get("vest", False)
+                    self.expert_kills = data.get("expert_kills", 0)
+                    self.boss_kills = data.get("boss_kills", 0)
+                    self.owned_weapons = data.get("owned_weapons", ["Пистолет"])
+                    self.equipped_weapon = data.get("equipped_weapon", "Пистолет")
+                    self.total_wins = data.get("total_wins", 0)
+            except:
+                pass
+
+class DuelApp(App):
+    def build(self):
+        return DuelGame()
+
+if __name__ == '__main__':
+    DuelApp().run()
